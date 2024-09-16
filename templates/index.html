@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mafia Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            max-width: 500px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        #log {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            background-color: #fafafa;
+        }
+        #joinGameSection {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Mafia Game</h1>
+
+    <div id="createJoinSection">
+        <button type="button" id="createGameButton">Create New Game</button>
+
+        <div id="joinGameSection">
+            <input type="text" id="joinGameCode" placeholder="Enter Game Code to Join" />
+            <button type="button" id="joinGameButton">Join Game</button>
+        </div>
+    </div>
+
+    <form id="joinForm" style="display:none;">
+        <input type="text" id="username" placeholder="Enter Your Username" required />
+        <button type="submit">Join Game</button>
+    </form>
+
+    <div id="gameOptions" style="display:none;">
+        <label for="numMafia">Number of Mafia:</label>
+        <input type="number" id="numMafia" min="1" value="1" />
+        <button id="startGameButton">Start Game</button>
+    </div>
+
+    <div id="log"></div>
+</div>
+
+<script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+<script>
+    const socket = io();
+    const createGameButton = document.getElementById('createGameButton');
+    const joinGameButton = document.getElementById('joinGameButton');
+    const joinForm = document.getElementById('joinForm');
+    const startGameButton = document.getElementById('startGameButton');
+    const log = document.getElementById('log');
+    const gameOptions = document.getElementById('gameOptions');
+    let gameCode = '';
+    let isHost = false;
+
+    // Log message to the log div
+    function logMessage(message) {
+        const p = document.createElement('p');
+        p.textContent = message;
+        log.appendChild(p);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    // Handle Create Game button click
+    createGameButton.addEventListener('click', function () {
+        gameCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        fetch('/create_game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game_code: gameCode })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    logMessage(`Error: ${data.error}`);
+                } else {
+                    logMessage(`Game created! Game code: ${gameCode}`);
+                    joinForm.style.display = 'block';
+                    document.getElementById('joinGameSection').style.display = 'none'; // Hide join section after creating game
+                    gameOptions.style.display = 'block';  // Show game options for host
+                    isHost = true;
+                }
+            })
+            .catch(error => logMessage(`Error: ${error}`));
+    });
+
+    // Handle Join Game button click
+    joinGameButton.addEventListener('click', function () {
+        gameCode = document.getElementById('joinGameCode').value.toUpperCase();
+        if (!gameCode) {
+            logMessage('Please enter a valid game code.');
+            return;
+        }
+        joinForm.style.display = 'block';
+        document.getElementById('joinGameSection').style.display = 'none'; // Hide join section after joining game
+        logMessage(`Joining game with code: ${gameCode}`);
+    });
+
+    // Handle form submission to join a game
+    joinForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        socket.emit('join_game', { game_code: gameCode, username: username });
+    });
+
+    // Handle Start Game button click (for host)
+    startGameButton.addEventListener('click', function () {
+        const numMafia = parseInt(document.getElementById('numMafia').value);
+        if (isHost) {
+            socket.emit('start_game', { game_code: gameCode, num_mafia: numMafia });
+        }
+    });
+
+    // Listen for game events
+    socket.on('player_joined', function (data) {
+        logMessage(`${data.username} joined the game. Total players: ${data.total_players}`);
+    });
+
+    socket.on('countdown', function (data) {
+        logMessage(data.message);
+    });
+
+    socket.on('role_assignment', function (data) {
+        logMessage(`Your role is: ${data.role}`);
+    });
+
+    socket.on('game_started', function (data) {
+        logMessage(data.message);
+    });
+
+    socket.on('error', function (data) {
+        logMessage(`Error: ${data.message}`);
+    });
+</script>
+</body>
+</html>
